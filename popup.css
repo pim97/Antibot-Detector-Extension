@@ -701,11 +701,22 @@ body {
 /* ===== ACTION FOOTER ===== */
 .actions-footer {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 12px 16px;
   background: linear-gradient(0deg, var(--bg-dark) 0%, transparent 100%);
   position: relative;
   z-index: 10;
+}
+
+.actions-footer .action-btn {
+  flex: 1 1 auto;
+  min-width: 90px;
+}
+
+.actions-footer .action-btn.brand {
+  flex: 1 1 100%;
+  margin-top: 0;
 }
 
 .action-btn {
@@ -722,6 +733,12 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   text-decoration: none;
+  min-width: 0; /* Allow buttons to shrink if needed */
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .action-btn.secondary {
@@ -1191,5 +1208,17 @@ body {
   background: rgba(16, 185, 129, 0.15) !important;
   border-color: rgba(16, 185, 129, 0.4) !important;
   color: #34D399 !important;
+}
+
+/* ===== SCREENSHOT BUTTON ===== */
+.action-btn .loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 4px;
 }
 

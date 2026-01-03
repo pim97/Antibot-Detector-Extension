@@ -1,6 +1,7 @@
 /**
  * Scrappey Bot Detector - Background Service Worker
  * Handles detection coordination, caching, and badge updates
+ * Uses minimal permissions: storage, activeTab, scripting
  */
 
 // Initialize detectors on startup
@@ -22,6 +23,63 @@ async function initialize() {
   
   console.log('[Scrappey] Background service worker ready');
 }
+
+// ============================================================================
+// SCRIPT INJECTION
+// ============================================================================
+
+/**
+ * Inject content scripts into a tab on-demand
+ * Uses activeTab permission when user clicks popup
+ */
+async function injectContentScripts(tabId) {
+  try {
+    // Check if scripts are already injected
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+      if (response?.pong) {
+        console.log('[Scrappey] Scripts already injected in tab', tabId);
+        return true;
+      }
+    } catch {
+      // Scripts not injected yet, continue
+    }
+
+    console.log('[Scrappey] Injecting content scripts into tab', tabId);
+    
+    // Inject main world script first (for JS hook detection)
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content-main-world.js'],
+      world: 'MAIN'
+    });
+    
+    // Inject isolated world scripts
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [
+        'modules/trace-logger.js',
+        'utils/debug.js',
+        'utils/utils.js',
+        'modules/cache-handler.js',
+        'modules/score-calculator.js',
+        'modules/scan-engine.js',
+        'content.js'
+      ]
+    });
+    
+    console.log('[Scrappey] Content scripts injected successfully');
+    return true;
+    
+  } catch (error) {
+    console.error('[Scrappey] Error injecting scripts:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// DETECTOR LOADING
+// ============================================================================
 
 /**
  * Transform new JSON format to detection engine format
@@ -186,6 +244,10 @@ async function loadDetector(category, name) {
   }
 }
 
+// ============================================================================
+// DETECTION ENGINE
+// ============================================================================
+
 /**
  * Run detection on page data
  */
@@ -241,7 +303,7 @@ function checkDetector(detector, pageData) {
   const matches = [];
   const detection = detector.detection || {};
   
-  // Check cookies
+  // Check cookies (now collected by content script from document.cookie)
   if (detection.cookie && pageData.cookies) {
     for (const rule of detection.cookie) {
       if (checkCookieRule(rule, pageData.cookies)) {
@@ -384,6 +446,10 @@ function calculateConfidence(matches, baseConfidence = 50) {
   return Math.min(maxConfidence + boost, 100);
 }
 
+// ============================================================================
+// BADGE
+// ============================================================================
+
 /**
  * Update extension badge
  */
@@ -399,17 +465,9 @@ async function updateBadge(tabId, detectionCount) {
   }
 }
 
-/**
- * Get cookies for a URL
- */
-async function getCookiesForUrl(url) {
-  try {
-    const cookies = await chrome.cookies.getAll({ url });
-    return cookies.map(c => ({ name: c.name, value: c.value }));
-  } catch {
-    return [];
-  }
-}
+// ============================================================================
+// MESSAGE HANDLING
+// ============================================================================
 
 /**
  * Handle messages from content scripts and popup
@@ -420,9 +478,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleMessage(message, sender) {
-  const tabId = sender.tab?.id;
+  const tabId = sender.tab?.id || message.tabId;
   
   switch (message.type) {
+    case 'PING':
+      return { pong: true };
+      
     case 'GET_DETECTORS':
       return { detectors };
       
@@ -438,13 +499,38 @@ async function handleMessage(message, sender) {
       return { detections: [] };
     }
     
+    case 'INJECT_AND_SCAN': {
+      // Popup requests injection and scan
+      const targetTabId = message.tabId;
+      const url = message.url;
+      
+      if (!targetTabId) {
+        return { success: false, error: 'No tab ID provided' };
+      }
+      
+      // Inject scripts
+      const injected = await injectContentScripts(targetTabId);
+      if (!injected) {
+        return { success: false, error: 'Failed to inject scripts' };
+      }
+      
+      // Wait for scripts to initialize
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Request page data from content script
+      try {
+        await chrome.tabs.sendMessage(targetTabId, { type: 'REQUEST_PAGE_DATA' });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+    
     case 'PAGE_DATA': {
       const url = message.data?.url || sender.tab?.url;
       
-      // Add cookies to page data
-      if (url) {
-        message.data.cookies = await getCookiesForUrl(url);
-      }
+      // Cookies are now included in message.data from content script
+      // No need to fetch separately
       
       // Run detection
       const detections = await runDetection(message.data);
@@ -463,38 +549,22 @@ async function handleMessage(message, sender) {
       return { success: true, detections };
     }
     
-    case 'PAGE_LOAD_NOTIFICATION': {
-      const url = message.url;
-      
-      // Check cache
-      const cached = detectionCache.get(url);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        // Update badge from cache
-        if (tabId) {
-          await updateBadge(tabId, cached.detections.length);
-        }
-        return { cacheHit: true };
-      }
-      
-      // Request page data collection
-      try {
-        await chrome.tabs.sendMessage(tabId, { type: 'REQUEST_PAGE_DATA' });
-      } catch {
-        // Tab might not have content script
-      }
-      
-      return { cacheHit: false };
-    }
-    
     case 'RUN_DETECTION': {
       // Force rescan - clear cache for this URL
       const url = message.url;
       detectionCache.delete(url);
       
-      try {
-        await chrome.tabs.sendMessage(message.tabId || tabId, { type: 'REQUEST_PAGE_DATA' });
-      } catch {
-        // Tab might not have content script
+      // Inject scripts if needed and request data
+      const targetTabId = message.tabId || tabId;
+      if (targetTabId) {
+        await injectContentScripts(targetTabId);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        try {
+          await chrome.tabs.sendMessage(targetTabId, { type: 'REQUEST_PAGE_DATA' });
+        } catch {
+          // Tab might not have content script
+        }
       }
       
       return { success: true };
@@ -526,10 +596,15 @@ async function handleMessage(message, sender) {
     
     case 'CLEAR_CACHE':
       detectionCache.clear();
-      await chrome.storage.local.remove(
-        Object.keys(await chrome.storage.local.get(null))
-          .filter(key => key.startsWith('detection_'))
-      );
+      try {
+        const allKeys = await chrome.storage.local.get(null);
+        const keysToRemove = Object.keys(allKeys).filter(key => key.startsWith('detection_'));
+        if (keysToRemove.length > 0) {
+          await chrome.storage.local.remove(keysToRemove);
+        }
+      } catch (error) {
+        console.error('[Scrappey] Error clearing storage:', error);
+      }
       return { success: true };
       
     case 'TOGGLE_EXTENSION': {
@@ -550,44 +625,12 @@ async function handleMessage(message, sender) {
   }
 }
 
-/**
- * Handle tab updates - trigger detection on page load
- */
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Trigger detection when page starts loading (to inject early)
-  if (changeInfo.status === 'loading' && tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
-    // Clear stale cache for this URL to get fresh detection
-    // Don't clear completely, just mark for refresh
-  }
-  
-  // When page completes, ensure detection runs
-  if (changeInfo.status === 'complete' && tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
-    console.log('[Scrappey] Tab complete, checking detection for:', tab.url);
-    
-    // Check if we have cached detections
-    const cached = detectionCache.get(tab.url);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      await updateBadge(tabId, cached.detections.length);
-    } else {
-      // No cache or stale, request fresh detection
-      try {
-        await chrome.tabs.sendMessage(tabId, { type: 'REQUEST_PAGE_DATA' });
-      } catch (error) {
-        // Content script might not be ready yet, retry after delay
-        setTimeout(async () => {
-          try {
-            await chrome.tabs.sendMessage(tabId, { type: 'REQUEST_PAGE_DATA' });
-          } catch {
-            // Give up if still failing
-          }
-        }, 1000);
-      }
-    }
-  }
-});
+// ============================================================================
+// TAB EVENTS (Badge updates only, no auto-scan)
+// ============================================================================
 
 /**
- * Handle tab activation
+ * Handle tab activation - update badge from cache
  */
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
@@ -603,4 +646,3 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 
 // Initialize on load
 initialize();
-

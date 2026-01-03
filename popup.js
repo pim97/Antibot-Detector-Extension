@@ -47,12 +47,12 @@ function initializeEventListeners() {
   
   // Action buttons
   document.getElementById('copyBtn')?.addEventListener('click', copyReport);
+  document.getElementById('screenshotBtn')?.addEventListener('click', takeScreenshot);
   document.getElementById('rescanBtn')?.addEventListener('click', rescanPage);
   
   // Settings controls
   document.getElementById('cacheDuration')?.addEventListener('input', handleCacheDurationChange);
   document.getElementById('showFingerprinting')?.addEventListener('change', saveSettings);
-  document.getElementById('autoScan')?.addEventListener('change', saveSettings);
   document.getElementById('clearCacheBtn')?.addEventListener('click', clearCache);
   
   // API Key
@@ -71,6 +71,14 @@ async function loadCurrentTab() {
     currentTabId = tab.id;
     currentTabUrl = tab.url;
     
+    // Check if this is a valid web page
+    if (!currentTabUrl || (!currentTabUrl.startsWith('http://') && !currentTabUrl.startsWith('https://'))) {
+      updateTabInfo(tab);
+      setMascotState('idle');
+      updateStatus('Cannot scan this page');
+      return;
+    }
+    
     // Update UI with tab info
     updateTabInfo(tab);
     
@@ -78,12 +86,43 @@ async function loadCurrentTab() {
     setMascotState('scanning');
     updateStatus('Scanning...');
     
-    // Load cached detections or run new scan
-    await loadDetections();
+    // Inject content scripts on-demand using activeTab permission
+    // This works because the user clicked the extension icon (user gesture)
+    await injectAndScan();
     
   } catch (error) {
     console.error('[Scrappey] Error loading tab:', error);
     updateStatus('Error loading page');
+  }
+}
+
+/**
+ * Inject content scripts and run scan
+ */
+async function injectAndScan() {
+  try {
+    // Request injection and scan from background
+    const response = await chrome.runtime.sendMessage({
+      type: 'INJECT_AND_SCAN',
+      tabId: currentTabId,
+      url: currentTabUrl
+    });
+    
+    if (!response.success) {
+      console.error('[Scrappey] Injection failed:', response.error);
+      // Try to load cached detections anyway
+    }
+    
+    // Wait a moment for detection to complete
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Load detections
+    await loadDetections();
+    
+  } catch (error) {
+    console.error('[Scrappey] Error in injectAndScan:', error);
+    // Try to load cached detections
+    await loadDetections();
   }
 }
 
@@ -721,6 +760,113 @@ async function copyReport() {
 }
 
 /**
+ * Take a screenshot of the extension popup
+ */
+async function takeScreenshot() {
+  const btn = document.getElementById('screenshotBtn');
+  
+  try {
+    // Show loading state
+    if (btn) {
+      btn.disabled = true;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `
+        <span class="loading-spinner"></span>
+        <span>Capturing...</span>
+      `;
+      
+      // Close settings panel if open
+      closeSettings();
+      
+      // Wait a moment for UI to settle
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Capture the main app container
+      const app = document.getElementById('app');
+      if (!app) {
+        throw new Error('App container not found');
+      }
+      
+      let canvas;
+      
+      // Use html2canvas for high-quality capture
+      if (checkHtml2Canvas()) {
+        canvas = await html2canvas(app, {
+          backgroundColor: '#0C1222',
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          allowTaint: false,
+          width: app.scrollWidth,
+          height: app.scrollHeight,
+          windowWidth: app.scrollWidth,
+          windowHeight: app.scrollHeight
+        });
+      } else {
+        // Fallback: Use ScreenshotHelper (basic canvas)
+        canvas = await ScreenshotHelper.captureElement(app, {
+          backgroundColor: '#0C1222',
+          scale: 2
+        });
+      }
+      
+      // Generate filename with URL and timestamp
+      const urlObj = new URL(currentTabUrl || 'unknown');
+      const hostname = urlObj.hostname.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `scrappey-detections_${hostname}_${timestamp}.png`;
+      
+      // Download the image
+      ScreenshotHelper.downloadCanvas(canvas, filename);
+      
+      // Show success feedback
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>Saved!</span>
+      `;
+      btn.classList.add('copy-success');
+      
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove('copy-success');
+        btn.innerHTML = originalHtml;
+      }, 2000);
+      
+    }
+  } catch (error) {
+    console.error('[Scrappey] Screenshot failed:', error);
+    
+    if (btn) {
+      btn.disabled = false;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        <span>Failed</span>
+      `;
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+      }, 2000);
+    }
+  }
+}
+
+/**
+ * Check if html2canvas is loaded
+ */
+function checkHtml2Canvas() {
+  if (typeof html2canvas === 'undefined') {
+    console.warn('[Scrappey] html2canvas not loaded, screenshot may have limited functionality');
+    return false;
+  }
+  return true;
+}
+
+/**
  * Generate a text report of detections
  */
 function generateReport() {
@@ -773,7 +919,6 @@ async function loadSettings() {
       'scrappey_enabled',
       'scrappey_cache_duration',
       'scrappey_show_fingerprinting',
-      'scrappey_auto_scan',
       'scrappey_api_key'
     ]);
     
@@ -796,11 +941,6 @@ async function loadSettings() {
       showFingerprinting.checked = result.scrappey_show_fingerprinting !== false;
     }
     
-    const autoScan = document.getElementById('autoScan');
-    if (autoScan) {
-      autoScan.checked = result.scrappey_auto_scan !== false;
-    }
-    
     const apiKeyInput = document.getElementById('apiKeyInput');
     if (apiKeyInput && result.scrappey_api_key) {
       apiKeyInput.value = result.scrappey_api_key;
@@ -815,7 +955,6 @@ async function saveSettings() {
   try {
     await chrome.storage.local.set({
       scrappey_show_fingerprinting: document.getElementById('showFingerprinting')?.checked ?? true,
-      scrappey_auto_scan: document.getElementById('autoScan')?.checked ?? true,
       scrappey_cache_duration: parseInt(document.getElementById('cacheDuration')?.value || '12')
     });
   } catch (error) {

@@ -4,42 +4,15 @@
   "version": "1.0.0",
   "description": "Detect anti-bot systems, CAPTCHAs, and fingerprinting technologies on any website. Powered by Scrappey.com",
 
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  },
-
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
-    "tabs",
-    "cookies"
-  ],
-
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "scripting"
   ],
 
   "background": {
     "service_worker": "background.js"
   },
-
-  "content_scripts": [
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content-main-world.js"],
-      "run_at": "document_start",
-      "world": "MAIN",
-      "all_frames": false
-    },
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["modules/trace-logger.js", "utils/debug.js", "utils/utils.js", "modules/cache-handler.js", "modules/score-calculator.js", "modules/scan-engine.js", "content.js"],
-      "run_at": "document_start",
-      "all_frames": false
-    }
-  ],
 
   "action": {
     "default_popup": "popup.html",
@@ -57,15 +30,5 @@
     "32": "icons/scrappey-32.png",
     "48": "icons/scrappey-48.png",
     "128": "icons/scrappey-128.png"
-  },
-
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "detectors/*/*",
-        "assets/*"
-      ],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

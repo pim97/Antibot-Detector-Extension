@@ -30,6 +30,31 @@ if (!window.__scrappeyContentInitialized) {
   }
   
   /**
+   * Parse document.cookie into array of {name, value} objects
+   */
+  function parseCookies() {
+    const cookies = [];
+    try {
+      const cookieString = document.cookie || '';
+      if (cookieString) {
+        const pairs = cookieString.split(';');
+        for (const pair of pairs) {
+          const [name, ...valueParts] = pair.trim().split('=');
+          if (name) {
+            cookies.push({
+              name: name.trim(),
+              value: valueParts.join('=') || ''
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Scrappey] Error parsing cookies:', error);
+    }
+    return cookies;
+  }
+  
+  /**
    * Collect page data for detection
    */
   async function collectPageData() {
@@ -37,7 +62,7 @@ if (!window.__scrappeyContentInitialized) {
       url: window.location.href,
       html: '',
       scripts: [],
-      cookies: [], // Will be filled by background
+      cookies: parseCookies(), // Parse cookies from document.cookie
       dom: { selectors: [] },
       windowProps: [],
       jsHooks: []
@@ -162,6 +187,11 @@ if (!window.__scrappeyContentInitialized) {
     if (!isContextValid()) return false;
     
     switch (message.type) {
+      case 'PING':
+        // Used to check if content script is already injected
+        sendResponse({ pong: true });
+        return true;
+        
       case 'REQUEST_PAGE_DATA':
         sendPageData(true).then(() => {
           sendResponse({ success: true });
