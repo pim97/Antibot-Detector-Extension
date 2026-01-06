@@ -86,9 +86,8 @@ async function loadCurrentTab() {
     setMascotState('scanning');
     updateStatus('Scanning...');
     
-    // Inject content scripts on-demand using activeTab permission
-    // This works because the user clicked the extension icon (user gesture)
-    await injectAndScan();
+    // Load detections (content scripts are auto-injected via manifest)
+    await loadDetectionsWithRetry();
     
   } catch (error) {
     console.error('[Scrappey] Error loading tab:', error);
@@ -97,32 +96,62 @@ async function loadCurrentTab() {
 }
 
 /**
- * Inject content scripts and run scan
+ * Load detections with retry for fresh scan
  */
-async function injectAndScan() {
+async function loadDetectionsWithRetry() {
   try {
-    // Request injection and scan from background
-    const response = await chrome.runtime.sendMessage({
+    // First, check if we have cached detections
+    let response = await chrome.runtime.sendMessage({
+      type: 'GET_DETECTIONS',
+      tabId: currentTabId,
+      url: currentTabUrl
+    });
+    
+    // If we have cached detections, display them
+    if (response?.detections?.length > 0) {
+      displayDetections(response.detections);
+      return;
+    }
+    
+    // No cached detections, request a scan
+    await chrome.runtime.sendMessage({
       type: 'INJECT_AND_SCAN',
       tabId: currentTabId,
       url: currentTabUrl
     });
     
-    if (!response.success) {
-      console.error('[Scrappey] Injection failed:', response.error);
-      // Try to load cached detections anyway
-    }
+    // Wait for detection to complete
+    await new Promise(resolve => setTimeout(resolve, 800));
     
-    // Wait a moment for detection to complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Load detections again
+    response = await chrome.runtime.sendMessage({
+      type: 'GET_DETECTIONS',
+      tabId: currentTabId,
+      url: currentTabUrl
+    });
     
-    // Load detections
-    await loadDetections();
+    displayDetections(response?.detections || []);
     
   } catch (error) {
-    console.error('[Scrappey] Error in injectAndScan:', error);
-    // Try to load cached detections
-    await loadDetections();
+    console.error('[Scrappey] Error loading detections:', error);
+    displayDetections([]);
+  }
+}
+
+/**
+ * Display detections in UI
+ */
+function displayDetections(detections) {
+  currentDetections = detections;
+  renderDetections(detections);
+  updateStats(detections);
+  
+  if (detections.length > 0) {
+    setMascotState('found');
+    updateStatus(`Found ${detections.length} protection${detections.length > 1 ? 's' : ''}`);
+  } else {
+    setMascotState('idle');
+    updateStatus('No protections detected');
   }
 }
 

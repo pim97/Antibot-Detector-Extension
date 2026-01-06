@@ -1,0 +1,118 @@
+================================================================================
+CHROME WEB STORE LISTING - COPY/PASTE CONTENT
+================================================================================
+
+--------------------------------------------------------------------------------
+STORE LISTING - PRODUCT DETAILS
+--------------------------------------------------------------------------------
+
+TITLE: Scrappey Bot Detector
+
+SUMMARY: Detect anti-bot systems, CAPTCHAs, and fingerprinting technologies on any website. Powered by Scrappey.com
+
+DESCRIPTION:
+Scrappey Bot Detector reveals the hidden security layers on any website you visit.
+
+🔍 WHAT IT DETECTS:
+
+• Anti-Bot Systems
+  Cloudflare, Akamai, DataDome, PerimeterX, Kasada, Imperva/Incapsula, Shape Security, AWS WAF, F5, Sucuri, Reblaze, and more.
+
+• CAPTCHAs
+  reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, FunCaptcha, GeeTest, and others.
+
+• Browser Fingerprinting
+  Canvas, WebGL, Audio, Font, WebRTC, Navigator, Screen, Battery API, Performance timing, and more.
+
+✨ FEATURES:
+
+• Real-time Detection - Scans pages automatically as you browse
+• Detailed Reports - See exactly what triggered each detection (cookies, scripts, DOM elements, window variables)
+• Confidence Scores - Know how certain the detection is
+• Screenshot Export - Capture and share detection results
+• Privacy Focused - All detection happens locally in your browser
+• Lightweight - Minimal performance impact
+
+🎯 WHO IT'S FOR:
+
+• Web Scraping Developers - Know what protections to bypass
+• Security Researchers - Analyze website security posture
+• Privacy Enthusiasts - Understand what's tracking you
+• QA Engineers - Verify CAPTCHA and bot detection implementations
+
+📊 DETECTION METHODS:
+
+• Cookie Analysis - Detects protection-specific cookies
+• Script Detection - Identifies loaded security scripts
+• DOM Inspection - Finds CAPTCHA containers and challenge elements
+• Window Property Analysis - Detects global JavaScript variables
+• API Hook Monitoring - Tracks fingerprinting API calls
+
+🔗 Powered by Scrappey.com - Professional web scraping solutions that bypass anti-bot protections.
+
+CATEGORY: Developer Tools
+
+LANGUAGE: English
+
+
+--------------------------------------------------------------------------------
+PRIVACY SECTION
+--------------------------------------------------------------------------------
+
+SINGLE PURPOSE DESCRIPTION:
+This extension detects anti-bot systems, CAPTCHAs, and browser fingerprinting technologies present on web pages. It analyzes cookies, scripts, DOM elements, and JavaScript variables to identify security protection systems, displaying results to help developers, researchers, and security professionals understand website security measures.
+
+PERMISSION JUSTIFICATIONS:
+
+storage justification:
+Required to cache detection results and user settings (cache duration, fingerprinting toggle, API key). This reduces unnecessary re-scanning and improves performance by storing results for previously analyzed pages.
+
+activeTab justification:
+Required to access the current tab's content when the user clicks the extension icon. This permission grants temporary access only to the active tab and only in response to a user action (clicking the extension icon). It allows the extension to analyze the page content, DOM elements, and loaded scripts for protection detection without requiring broad host permissions.
+
+scripting justification:
+Required to inject content scripts into the active tab when the user clicks the extension icon. The content scripts collect page data (HTML content, script sources, DOM elements, window properties) needed to detect anti-bot systems and CAPTCHAs. Scripts are only injected on-demand when the user explicitly requests a scan.
+
+cookies justification:
+Essential for detecting anti-bot protection systems. Most security solutions (Cloudflare, Akamai, DataDome, PerimeterX, etc.) use HttpOnly cookies that are only accessible via the chrome.cookies API. Without this permission, the extension cannot detect cookie-based protections which are the primary detection method for anti-bot systems. Cookie access is limited to the active tab's URL when the user clicks the extension.
+
+ARE YOU USING REMOTE CODE?
+No, I am not using Remote code
+
+Justification:
+All code is bundled within the extension package. Detection logic, pattern matching, and analysis run entirely locally. The only external communication is optional API calls to scrappey.com for balance checking when users configure an API key.
+
+DATA USAGE:
+What user data do you plan to collect from users now or in the future?
+
+[UNCHECKED] Personally identifiable information
+[UNCHECKED] Health information
+[UNCHECKED] Financial and payment information
+[UNCHECKED] Authentication information
+[UNCHECKED] Personal communications
+[UNCHECKED] Location
+[UNCHECKED] Web history
+[UNCHECKED] User activity
+[UNCHECKED] Website content
+
+CERTIFICATIONS:
+[CHECKED] I do not sell or transfer user data to third parties, apart from the approved use cases
+[CHECKED] I do not use or transfer user data for purposes that are unrelated to my item's single purpose
+[CHECKED] I do not use or transfer user data to determine creditworthiness or for lending purposes
+
+PRIVACY POLICY URL:
+https://scrappey.com/privacy
+
+
+--------------------------------------------------------------------------------
+ADDITIONAL FIELDS
+--------------------------------------------------------------------------------
+
+HOMEPAGE URL: https://scrappey.com
+SUPPORT URL: https://discord.gg/scrappey
+
+MATURE CONTENT: No
+
+
+================================================================================
+

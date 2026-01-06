@@ -1,7 +1,7 @@
 /**
  * Scrappey Bot Detector - Background Service Worker
  * Handles detection coordination, caching, and badge updates
- * Uses minimal permissions: storage, activeTab, scripting
+ * Permissions: storage, activeTab, scripting, cookies (minimal, no host_permissions)
  */
 
 // Initialize detectors on startup
@@ -24,13 +24,27 @@ async function initialize() {
   console.log('[Scrappey] Background service worker ready');
 }
 
+/**
+ * Get cookies for a URL using chrome.cookies API
+ * Works with activeTab permission when user clicks extension
+ */
+async function getCookiesForUrl(url) {
+  try {
+    const cookies = await chrome.cookies.getAll({ url });
+    return cookies.map(c => ({ name: c.name, value: c.value }));
+  } catch (error) {
+    console.warn('[Scrappey] Error getting cookies:', error);
+    return [];
+  }
+}
+
 // ============================================================================
-// SCRIPT INJECTION
+// SCRIPT INJECTION (On-demand with activeTab)
 // ============================================================================
 
 /**
  * Inject content scripts into a tab on-demand
- * Uses activeTab permission when user clicks popup
+ * Uses activeTab permission - only works when user clicks extension icon
  */
 async function injectContentScripts(tabId) {
   try {
@@ -47,7 +61,7 @@ async function injectContentScripts(tabId) {
 
     console.log('[Scrappey] Injecting content scripts into tab', tabId);
     
-    // Inject main world script first (for JS hook detection)
+    // Inject main world script first (for window property detection)
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content-main-world.js'],
@@ -500,7 +514,7 @@ async function handleMessage(message, sender) {
     }
     
     case 'INJECT_AND_SCAN': {
-      // Popup requests injection and scan
+      // Popup requests injection and scan (uses activeTab permission)
       const targetTabId = message.tabId;
       const url = message.url;
       
@@ -508,14 +522,14 @@ async function handleMessage(message, sender) {
         return { success: false, error: 'No tab ID provided' };
       }
       
-      // Inject scripts
+      // Inject content scripts on-demand
       const injected = await injectContentScripts(targetTabId);
       if (!injected) {
         return { success: false, error: 'Failed to inject scripts' };
       }
       
       // Wait for scripts to initialize
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Request page data from content script
       try {
@@ -529,8 +543,10 @@ async function handleMessage(message, sender) {
     case 'PAGE_DATA': {
       const url = message.data?.url || sender.tab?.url;
       
-      // Cookies are now included in message.data from content script
-      // No need to fetch separately
+      // Get cookies using chrome.cookies API (can access HttpOnly cookies)
+      if (url) {
+        message.data.cookies = await getCookiesForUrl(url);
+      }
       
       // Run detection
       const detections = await runDetection(message.data);
@@ -554,11 +570,11 @@ async function handleMessage(message, sender) {
       const url = message.url;
       detectionCache.delete(url);
       
-      // Inject scripts if needed and request data
+      // Inject scripts and request data
       const targetTabId = message.tabId || tabId;
       if (targetTabId) {
         await injectContentScripts(targetTabId);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 200));
         
         try {
           await chrome.tabs.sendMessage(targetTabId, { type: 'REQUEST_PAGE_DATA' });
@@ -626,11 +642,12 @@ async function handleMessage(message, sender) {
 }
 
 // ============================================================================
-// TAB EVENTS (Badge updates only, no auto-scan)
+// TAB EVENTS
 // ============================================================================
 
 /**
- * Handle tab activation - update badge from cache
+ * Handle tab activation - update badge from cache if available
+ * Note: With activeTab permission, detection only runs when user clicks extension
  */
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
@@ -640,7 +657,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
       await updateBadge(tabId, cached?.detections?.length || 0);
     }
   } catch {
-    // Tab might not exist
+    // Tab might not exist or no permission to access URL
   }
 });
 

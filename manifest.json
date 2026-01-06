@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Scrappey Bot Detector",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Detect anti-bot systems, CAPTCHAs, and fingerprinting technologies on any website. Powered by Scrappey.com",
 
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
 
   "background": {
@@ -30,5 +31,15 @@
     "32": "icons/scrappey-32.png",
     "48": "icons/scrappey-48.png",
     "128": "icons/scrappey-128.png"
-  }
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "detectors/*/*",
+        "assets/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

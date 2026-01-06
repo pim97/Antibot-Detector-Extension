@@ -30,39 +30,16 @@ if (!window.__scrappeyContentInitialized) {
   }
   
   /**
-   * Parse document.cookie into array of {name, value} objects
-   */
-  function parseCookies() {
-    const cookies = [];
-    try {
-      const cookieString = document.cookie || '';
-      if (cookieString) {
-        const pairs = cookieString.split(';');
-        for (const pair of pairs) {
-          const [name, ...valueParts] = pair.trim().split('=');
-          if (name) {
-            cookies.push({
-              name: name.trim(),
-              value: valueParts.join('=') || ''
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[Scrappey] Error parsing cookies:', error);
-    }
-    return cookies;
-  }
-  
-  /**
    * Collect page data for detection
+   * Note: Cookies are fetched by background script using chrome.cookies API
+   * to access HttpOnly cookies that aren't visible to document.cookie
    */
   async function collectPageData() {
     const data = {
       url: window.location.href,
       html: '',
       scripts: [],
-      cookies: parseCookies(), // Parse cookies from document.cookie
+      cookies: [], // Cookies will be added by background script
       dom: { selectors: [] },
       windowProps: [],
       jsHooks: []
